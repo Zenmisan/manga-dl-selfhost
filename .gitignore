@@ -1,0 +1,80 @@
+# Python
+backend/venv/
+backend/.venv/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+.agents
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+*.pem
+
+# Logs
+logs/
+*.log
+.firebase/*
+*.log
+.claude/*
+.agents/*
+.kiro/*
+CLAUDE.md
+
+# QA testing artifacts
+*.cbz
+insomniacs-after-school_c001\ _\ c010.zip
+qa_audit.py
+qa_screenshots/
+qa_report.json
+
+# Folders
+UI/
+stitch/
+
+# Databases & SQLite
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/*.db
+
+# Caches
+.firebase/
+**/.firebase/
+
+# Debug/test HTML snapshots and zips
+*.html
+*.zip
+check_asura_browse.py
+inspect_asura_*.py
+parse_test_asura.py
+test_asura_params.py
+migrate_db.py
+mk_resp.html
+scratch/
+dataconnect-debug.log
+design.md
+skills-lock.json
+.firebaserc
+firebase.json
+setup.ps1
+.hallmark/

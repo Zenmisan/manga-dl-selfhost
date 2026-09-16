@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - manga_library:/data/manga-library
+      - manga_db:/data
+    environment:
+      - API_KEY=${API_KEY:-change-me}
+      - LIBRARY_PATH=/data/manga-library
+      - DATABASE_URL=sqlite+aiosqlite:////data/manga_dl.db
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      # Tracker OAuth (optional — leave blank to skip)
+      - ANILIST_CLIENT_ID=${ANILIST_CLIENT_ID:-}
+      - ANILIST_CLIENT_SECRET=${ANILIST_CLIENT_SECRET:-}
+      - MAL_CLIENT_ID=${MAL_CLIENT_ID:-}
+      - MAL_CLIENT_SECRET=${MAL_CLIENT_SECRET:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000/api
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  manga_library:
+  manga_db:
