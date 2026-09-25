@@ -144,16 +144,6 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "nsfw": False,
         "skip_proxy": False,
     },
-    "pawmanga": {
-        "template": "madara",
-        "base_url": "https://pawmanga.com",
-        "name": "PawManga",
-        "lang": "en",
-        "version": "1.0.0",
-        "icon": "https://pawmanga.com/favicon.ico",
-        "nsfw": False,
-        "skip_proxy": False,
-    },
     "mangasushi": {
         "template": "madara",
         "base_url": "https://mangasushi.org",
@@ -203,16 +193,6 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "nsfw": False,
         "skip_proxy": False,
     },
-    "spmanhwa": {
-        "template": "madara",
-        "base_url": "https://spmanhwa.online",
-        "name": "SPManhwa",
-        "lang": "en",
-        "version": "1.0.0",
-        "icon": "https://spmanhwa.online/favicon.ico",
-        "nsfw": False,
-        "skip_proxy": False,
-    },
     "tritiniascans": {
         "template": "madara",
         "base_url": "https://tritinia.org",
@@ -233,6 +213,16 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "nsfw": False,
         "skip_proxy": False,
     },
+    "yaoiscan": {
+        "template": "madara",
+        "base_url": "https://yaoiscan.com",
+        "name": "YaoiScan",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://yaoiscan.com/favicon.ico",
+        "nsfw": True,
+        "skip_proxy": False,
+    },
     # ── Custom JS (non-WordPress) ─────────────────────────────
     "mangakakalot": {
         "script": "mangakakalot.js",
@@ -243,21 +233,12 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "nsfw": False,
         "skip_proxy": False,
     },
-    "manganato": {
-        "script": "manganato.js",
-        "name": "MangaNato",
-        "lang": "en",
-        "version": "1.0.0",
-        "icon": "https://manganato.com/favicon.ico",
-        "nsfw": False,
-        "skip_proxy": False,
-    },
     "bato": {
         "script": "bato.js",
         "name": "Bato.to",
         "lang": "en",
-        "version": "1.0.0",
-        "icon": "https://bato.to/favicon.ico",
+        "version": "1.1.0",
+        "icon": "https://bato1.com/assets/bato1/assets/icon.png",
         "nsfw": False,
         "skip_proxy": False,
     },
@@ -294,15 +275,6 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "lang": "en",
         "version": "1.0.0",
         "icon": "https://webtoons.com/favicon.ico",
-        "nsfw": False,
-        "skip_proxy": False,
-    },
-    "mangaplus": {
-        "script": "mangaplus.js",
-        "name": "MANGA Plus",
-        "lang": "en",
-        "version": "1.0.0",
-        "icon": "https://mangaplus.shueisha.co.jp/favicon.ico",
         "nsfw": False,
         "skip_proxy": False,
     },
@@ -365,6 +337,186 @@ BUILT_IN_EXTENSIONS: dict[str, dict] = {
         "nsfw": False,
         "skip_proxy": True,
     },
+    "novelbin": {
+        "script": "novelbin.js",
+        "type": "novel",
+        "name": "NovelBin",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelarrow.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "novelfire": {
+        "script": "novelfire.js",
+        "type": "novel",
+        "name": "NovelFire",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelfire.net/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "novelfull": {
+        "script": "novelfull.js",
+        "type": "novel",
+        "name": "NovelFull",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelfull.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "freewebnovel": {
+        "script": "freewebnovel.js",
+        "type": "novel",
+        "name": "FreeWebNovel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://freewebnovel.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "allnovel": {
+        "script": "allnovel.js",
+        "type": "novel",
+        "name": "AllNovel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://allnovel.org/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "novelphoenix": {
+        "script": "novelphoenix.js",
+        "type": "novel",
+        "name": "Novel Phoenix",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelphoenix.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "readnovelfull": {
+        "script": "readnovelfull.js",
+        "type": "novel",
+        "name": "ReadNovelFull",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://readnovelfull.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "libread": {
+        "script": "libread.js",
+        "type": "novel",
+        "name": "LibRead",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://libread.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "brightnovel": {
+        "script": "brightnovel.js",
+        "type": "novel",
+        "name": "Bright Novel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://brightnovels.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "chrysanthemumgarden": {
+        "script": "chrysanthemumgarden.js",
+        "type": "novel",
+        "name": "Chrysanthemum Garden",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://chrysanthemumgarden.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "comrademao": {
+        "script": "comrademao.js",
+        "type": "novel",
+        "name": "Comrademao",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://comrademao.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "lightnoveltranslations": {
+        "script": "lightnoveltranslations.js",
+        "type": "novel",
+        "name": "Light Novel Translations",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://lightnovelstranslations.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "bestlightnovel": {
+        "script": "bestlightnovel.js",
+        "type": "novel",
+        "name": "BestLightNovel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://bestlightnovel.com/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "asianovel": {
+        "script": "asianovel.js",
+        "type": "novel",
+        "name": "Asian Novel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://www.asianovel.net/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "novelbuddy": {
+        "script": "novelbuddy.js",
+        "type": "novel",
+        "name": "NovelBuddy",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelbuddy.me/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "readlightnovel": {
+        "script": "readlightnovel.js",
+        "type": "novel",
+        "name": "ReadLightNovel",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://www.readlightnovel.me/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "ranobes": {
+        "script": "ranobes.js",
+        "type": "novel",
+        "name": "Ranobes",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://ranobes.net/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
+    "novelsonline": {
+        "script": "novelsonline.js",
+        "type": "novel",
+        "name": "NovelsOnline",
+        "lang": "en",
+        "version": "1.0.0",
+        "icon": "https://novelsonline.net/favicon.ico",
+        "nsfw": False,
+        "skip_proxy": False,
+    },
 }
 
 
@@ -377,7 +529,7 @@ def get_extension_code_by_pkg(pkg_id: str) -> dict | None:
         elif "template" in meta:
             template_file = f"{meta['template']}.template.js"
             template = load_extension_script(template_file)
-            code = template.replace("{BASE_URL}", meta["base_url"].rstrip("/"))
+            code = template.replace("{BASE_URL}", meta["base_url"].rstrip("/")).replace("{SOURCE_ID}", pkg_id)
         else:
             return None
         return {
@@ -433,12 +585,12 @@ def get_extension_code_by_pkg(pkg_id: str) -> dict | None:
         base_url = home_url.rstrip("/")
         if theme == "Madara":
             template = load_extension_script("madara.template.js")
-            code = template.replace("{BASE_URL}", base_url)
+            code = template.replace("{BASE_URL}", base_url).replace("{SOURCE_ID}", pkg_id)
             log.info("Dynamically generated Madara code for package: %s, URL: %s", pkg_id, base_url)
             return {"code": code, "skip_proxy": False}
         elif theme == "MangaThemesia":
             template = load_extension_script("mangathemesia.template.js")
-            code = template.replace("{BASE_URL}", base_url)
+            code = template.replace("{BASE_URL}", base_url).replace("{SOURCE_ID}", pkg_id)
             log.info("Dynamically generated MangaThemesia code for package: %s, URL: %s", pkg_id, base_url)
             return {"code": code, "skip_proxy": False}
 

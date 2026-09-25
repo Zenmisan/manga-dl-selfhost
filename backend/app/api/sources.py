@@ -1,4 +1,5 @@
 import re
+import time
 import hashlib
 import logging
 from fastapi import APIRouter, HTTPException, Request
@@ -16,6 +17,11 @@ from app.services.js_extensions import (
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/sources", tags=["sources"])
+public_router = APIRouter(prefix="/sources", tags=["sources"])
+
+_market_cache: list[dict] | None = None
+_market_cache_time: float = 0
+MARKET_CACHE_TTL = 86400  # 24 hours
 
 
 @router.get("/builtins")
@@ -35,12 +41,20 @@ async def list_builtins():
         }
         for ext_id, meta in BUILT_IN_EXTENSIONS.items()
     ]
-    return JSONResponse(content=data, headers={"Cache-Control": "public, max-age=3600"})
+    return JSONResponse(content=data, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=86400"})
 
 
 @router.get("/market")
 async def list_market_sources():
     """Return built-in extensions + Keiyoushi community extensions."""
+    global _market_cache, _market_cache_time
+    now = time.time()
+    if _market_cache is not None and (now - _market_cache_time < MARKET_CACHE_TTL):
+        return JSONResponse(
+            content=_market_cache,
+            headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=86400"},
+        )
+
     sources = [
         {
             "id": ext_id,
@@ -54,10 +68,11 @@ async def list_market_sources():
             "type": meta.get("type", "manga"),
         }
         for ext_id, meta in BUILT_IN_EXTENSIONS.items()
+        if meta.get("type") != "novel"
     ]
 
     try:
-        response = requests.get(KEIYOUSHI_INDEX, impersonate="chrome110", timeout=10)
+        response = requests.get(KEIYOUSHI_INDEX, impersonate="chrome110", timeout=5)
         if response.status_code == 200:
             data = response.json()
             _SENTINEL_NAMES = {"outdated app", "update to mihon", "update mihon", "app outdated"}
@@ -83,7 +98,12 @@ async def list_market_sources():
     except Exception as e:
         log.warning("Keiyoushi market fetch failed (non-fatal): %s", e)
 
-    return sources
+    _market_cache = sources
+    _market_cache_time = now
+    return JSONResponse(
+        content=sources,
+        headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=86400"},
+    )
 
 
 @router.get("/code/{pkg_id}")
@@ -94,8 +114,8 @@ async def get_extension_code(pkg_id: str, request: Request):
         etag = '"' + hashlib.md5(res["code"].encode()).hexdigest()[:12] + '"'
         if request.headers.get("if-none-match") == etag:
             from fastapi.responses import Response
-            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache"})
-        return JSONResponse(content=res, headers={"Cache-Control": "no-cache", "ETag": etag})
+            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=86400"})
+        return JSONResponse(content=res, headers={"Cache-Control": "public, max-age=86400", "ETag": etag})
     raise HTTPException(status_code=404, detail="Extension code not found")
 
 
@@ -125,3 +145,28 @@ async def configure_suwayomi(config: SuwayomiConfig):
         raise HTTPException(500, "Suwayomi provider not registered")
     provider.configure(config.base_url)
     return {"status": "ok", "base_url": config.base_url}
+
+
+class ComixtoToken(BaseModel):
+    token: str
+
+
+class ComixtoCache(BaseModel):
+    url: str
+    data: dict | list
+
+
+@public_router.post("/comixto/token")
+async def set_comixto_token(body: ComixtoToken):
+    """Update the comixto _= API token at runtime. No auth — called by browser userscript."""
+    from app.services.proxy_service import set_runtime_token
+    set_runtime_token("comixto", body.token.strip())
+    return {"status": "ok", "token_length": len(body.token.strip())}
+
+
+@public_router.post("/comixto/cache")
+async def cache_comixto_response(body: ComixtoCache):
+    """Store a comixto API response relayed by the browser userscript."""
+    from app.services.proxy_service import cache_api_response
+    cache_api_response(body.url, body.data)
+    return {"status": "ok", "url": body.url}

@@ -54,10 +54,15 @@ class MigrationRequest(BaseModel):
     new_cover_url: str | None = None
 
 
-@router.get("/proxy/html")
-async def proxy_html(url: str = Query(...)):
+@router.api_route("/proxy/html", methods=["GET", "POST"])
+async def proxy_html(request: Request, url: str = Query(...)):
     """Proxy HTML for extension Web Workers that can't bypass CORS."""
-    return await proxy_html_content(url)
+    body = None
+    content_type = None
+    if request.method == "POST":
+        body = await request.body()
+        content_type = request.headers.get("content-type")
+    return await proxy_html_content(url, method=request.method, body=body, content_type=content_type)
 
 
 @router.get("/proxy/json")

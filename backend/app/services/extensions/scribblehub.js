@@ -27,7 +27,8 @@ function _shParseCards(doc, provider) {
 
 var extension = {
   async search(query, page) {
-    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/?s=' + encodeURIComponent(query) + '&post_type=fictionposts&paged=' + (page || 1)));
+    // QuickNovel uses /series-finder/?sf=1&sh= for search
+    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/series-finder/?sf=1&sh=' + encodeURIComponent(query) + '&pg=' + (page || 1)));
     var doc = new DOMParser().parseFromString(data.html, 'text/html');
     return _shParseCards(doc, 'scribblehub');
   },
@@ -51,29 +52,33 @@ var extension = {
       if (g) genres.push(g);
     });
 
-    var statusEl = doc.querySelector('.rnd_stats .stat_item:last-child, .fic_stats');
-    var status = null;
+    var statusEl = doc.querySelector('ul.widget_fic_similar > li:last-child span');
+    var status = statusEl ? statusEl.textContent.trim().split('-')[0].trim() : null;
 
-    var authorEl = doc.querySelector('.auth_name_fic a, .author a');
+    var authorEl = doc.querySelector('.auth_name_fic, span.auth_name_fic');
     var authors = authorEl ? [authorEl.textContent.trim()] : [];
 
+    // QuickNovel uses wi_getreleases_pagination (not wi_getvol) with pagenum param
     var chapters = [];
     var chapterData = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/wp-admin/admin-ajax.php'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'action=wi_getvol&mypostid=' + novelId + '&pageno=1',
+      body: 'action=wi_getreleases_pagination&pagenum=1&mypostid=' + novelId,
     }).catch(function() { return { html: '' }; });
 
     var chDoc = new DOMParser().parseFromString(chapterData.html || '', 'text/html');
-    chDoc.querySelectorAll('.toc_ol li a, .chapter-item a').forEach(function(a, i) {
+    chDoc.querySelectorAll('ol.toc_ol > li, .toc_ol li').forEach(function(li, i) {
+      var a = li.querySelector('a');
+      if (!a) return;
       var href = a.getAttribute('href') || '';
       var chIdMatch = href.match(/\/read\/(\d+)\/chapter\/(\d+)/);
       if (!chIdMatch) return;
       var chId = chIdMatch[1] + '/chapter/' + chIdMatch[2];
       var chTitle = a.textContent.trim();
+      var dateEl = li.querySelector('span');
       var numMatch = chTitle.match(/chapter\s+([\d.]+)/i) || chTitle.match(/([\d.]+)/);
-      var num = numMatch ? parseFloat(numMatch[1]) : (chapters.length + 1);
-      chapters.push({ id: chId, title: chTitle, number: num, published_at: null });
+      var num = numMatch ? parseFloat(numMatch[1]) : (i + 1);
+      chapters.push({ id: chId, title: chTitle, number: num, published_at: dateEl ? dateEl.textContent.trim() : null });
     });
 
     return { id: novelId, title: title, cover_url: cover, description: desc, status: status, genres: genres, authors: authors, provider: 'scribblehub', url: _SH + '/series/' + novelId + '/', chapters: chapters };
@@ -85,6 +90,7 @@ var extension = {
     var chId = parts[1];
     var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/read/' + seriesId + '/chapter/' + chId + '/'));
     var doc = new DOMParser().parseFromString(data.html, 'text/html');
+    // QuickNovel: div#chp_raw is the chapter content
     var contentEl = doc.querySelector('#chp_raw, .chapter-content, .wi_fic_story');
     var content = contentEl ? contentEl.innerHTML : '<p>Chapter content not found.</p>';
     return { content: _shSanitize(content), format: 'html' };
@@ -97,8 +103,21 @@ var extension = {
   },
 
   async getLatest(page) {
-    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/series-ranking/?sort=latest&paged=' + (page || 1)));
+    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_SH + '/?pg=' + (page || 1)));
     var doc = new DOMParser().parseFromString(data.html, 'text/html');
-    return _shParseCards(doc, 'scribblehub');
+    // Latest on homepage uses table#main_releases
+    var results = [];
+    doc.querySelectorAll('table#main_releases tr, table#main_releases > tbody > tr').forEach(function(row) {
+      var a = row.querySelector('a.fp_title');
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      var idMatch = href.match(/scribblehub\.com\/series\/(\d+)/);
+      if (!idMatch) return;
+      var img = row.querySelector('img');
+      var cover = img ? (img.getAttribute('src') || img.getAttribute('data-src')) : null;
+      results.push({ id: idMatch[1], title: a.textContent.trim(), cover_url: cover, provider: 'scribblehub', url: _SH + '/series/' + idMatch[1] + '/', status: null });
+    });
+    if (results.length === 0) return _shParseCards(doc, 'scribblehub');
+    return results;
   },
 };

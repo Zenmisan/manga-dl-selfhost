@@ -1,34 +1,115 @@
 var _BASE = '{BASE_URL}';
+var _PROVIDER = '{SOURCE_ID}';
+var _genreCache = null;
 
 async function _fetchDoc(url) {
   var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(url));
   return new DOMParser().parseFromString(data.html, 'text/html');
 }
 
+function _getImg(el) {
+  if (!el) return null;
+  var img = el.querySelector('img');
+  if (!img) return null;
+  return img.getAttribute('data-src') ||
+    img.getAttribute('data-lazy-src') ||
+    img.getAttribute('data-wpfc-original-src') ||
+    img.getAttribute('src') ||
+    (img.getAttribute('srcset') || '').split(' ')[0] ||
+    null;
+}
+
+var _CARD_SEL = '.utao .uta, .listupd .bs, .bsx, .bs';
+
+function _parseCard(card) {
+  var a = card.querySelector('.tt a, h4 a, .title a, a');
+  if (!a) return null;
+  var href = a.getAttribute('href') || '';
+  var slug = href.replace(/\/$/, '').split('/').pop();
+  if (!slug) return null;
+  var titleEl = card.querySelector('.tt, h4, .title');
+  var title = (titleEl ? titleEl.textContent.trim() : '') || a.textContent.trim();
+  return {
+    id: slug,
+    title: title,
+    cover_url: _getImg(card),
+    provider: _PROVIDER,
+    url: href,
+    status: null,
+  };
+}
+
+function _parseCards(doc) {
+  var results = []; var seen = {};
+  doc.querySelectorAll(_CARD_SEL).forEach(function(card) {
+    var r = _parseCard(card);
+    if (r && !seen[r.id]) { seen[r.id] = true; results.push(r); }
+  });
+  return results;
+}
+
+async function _loadGenres() {
+  if (_genreCache !== null) return _genreCache;
+  _genreCache = [];
+  try {
+    var doc = await _fetchDoc(_BASE + '/manga/?page=1');
+    var seen = {};
+    doc.querySelectorAll('a[href*="/genre"], a[href*="/genres"]').forEach(function(a) {
+      var href = (a.getAttribute('href') || '').replace(/\/?$/, '/');
+      if (!href || seen[href]) return;
+      // exclude the genre index page itself
+      if (href.endsWith('/genre/') || href.endsWith('/genres/')) return;
+      seen[href] = true;
+      _genreCache.push(href);
+    });
+  } catch(e) {}
+  return _genreCache;
+}
+
+async function _browseByPage(orderBy, page) {
+  var p = page || 1;
+  var BATCH = 5;
+
+  if (p === 1) {
+    var doc = await _fetchDoc(_BASE + '/manga/?page=1&order=' + orderBy);
+    var r = _parseCards(doc);
+    if (r.length > 0) return r;
+  }
+
+  var genres = await _loadGenres();
+  if (!genres.length) {
+    var doc2 = await _fetchDoc(_BASE + '/manga/?page=' + p + '&order=' + orderBy);
+    return _parseCards(doc2);
+  }
+
+  var offset = (p > 1 ? p : 1) - 1;
+  var totalBatches = Math.ceil(genres.length / BATCH);
+  var batchIdx = (offset - 1) % totalBatches;
+  var genrePage = Math.floor((offset - 1) / totalBatches) + 1;
+
+  var start = batchIdx * BATCH;
+  var batch = genres.slice(start, start + BATCH);
+  if (!batch.length) return [];
+
+  var fetches = batch.map(function(gUrl) {
+    var url = gUrl + 'page/' + genrePage + '/?order=' + orderBy;
+    return _fetchDoc(url).then(_parseCards).catch(function() { return []; });
+  });
+  var pages = await Promise.all(fetches);
+  var merged = []; var seen = {};
+  pages.forEach(function(arr) {
+    arr.forEach(function(r) {
+      if (!seen[r.id]) { seen[r.id] = true; merged.push(r); }
+    });
+  });
+  return merged;
+}
+
 var extension = {
   async search(query, page) {
     var pageStr = (page || 1) > 1 ? ('/page/' + page) : '';
     var doc = await _fetchDoc(_BASE + pageStr + '/?s=' + encodeURIComponent(query));
-    var results = [];
-    var seen = {};
-    doc.querySelectorAll('.utao .uta, .listupd .bs, .bsx, .bs').forEach(function(card) {
-      var a = card.querySelector('.tt a, h4 a, .title a, a');
-      if (!a) return;
-      var href = a.getAttribute('href') || '';
-      var slug = href.replace(/\/$/, '').split('/').pop();
-      if (!slug || seen[slug]) return;
-      seen[slug] = true;
-      var img = card.querySelector('img');
-      results.push({
-        id: slug,
-        title: a.textContent.trim(),
-        cover_url: img ? (img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src')) : null,
-        provider: 'mangathemesia',
-        url: href,
-        status: null,
-      });
-    });
-    return results;
+    return _parseCards(doc);
   },
 
   async getMangaDetail(mangaId) {
@@ -36,7 +117,10 @@ var extension = {
     var titleEl = doc.querySelector('h1.entry-title, h1');
     var title = titleEl ? titleEl.textContent.trim() : mangaId;
     var img = doc.querySelector('.thumb img, .info-image img');
-    var cover = img ? (img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src')) : null;
+    var cover = img ? (
+      img.getAttribute('data-src') || img.getAttribute('data-lazy-src') ||
+      img.getAttribute('data-wpfc-original-src') || img.getAttribute('src')
+    ) : null;
     var descEl = doc.querySelector('.entry-content, .synopsis, [itemprop="description"]');
     var desc = descEl ? descEl.textContent.trim() : null;
 
@@ -72,7 +156,7 @@ var extension = {
       status: null,
       genres: genres,
       authors: [],
-      provider: 'mangathemesia',
+      provider: _PROVIDER,
       url: _BASE + '/manga/' + mangaId,
       chapters: chapters,
     };
@@ -93,50 +177,10 @@ var extension = {
   },
 
   async getPopular(page) {
-    var doc = await _fetchDoc(_BASE + '/manga/?page=' + (page || 1) + '&order=popular');
-    var results = [];
-    var seen = {};
-    doc.querySelectorAll('.utao .uta, .listupd .bs, .bsx, .bs').forEach(function(card) {
-      var a = card.querySelector('.tt a, h4 a, .title a, a');
-      if (!a) return;
-      var href = a.getAttribute('href') || '';
-      var slug = href.replace(/\/$/, '').split('/').pop();
-      if (!slug || seen[slug]) return;
-      seen[slug] = true;
-      var img = card.querySelector('img');
-      results.push({
-        id: slug,
-        title: a.textContent.trim(),
-        cover_url: img ? (img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src')) : null,
-        provider: 'mangathemesia',
-        url: href,
-        status: null,
-      });
-    });
-    return results;
+    return _browseByPage('popular', page);
   },
 
   async getLatest(page) {
-    var doc = await _fetchDoc(_BASE + '/manga/?page=' + (page || 1) + '&order=update');
-    var results = [];
-    var seen = {};
-    doc.querySelectorAll('.utao .uta, .listupd .bs, .bsx, .bs').forEach(function(card) {
-      var a = card.querySelector('.tt a, h4 a, .title a, a');
-      if (!a) return;
-      var href = a.getAttribute('href') || '';
-      var slug = href.replace(/\/$/, '').split('/').pop();
-      if (!slug || seen[slug]) return;
-      seen[slug] = true;
-      var img = card.querySelector('img');
-      results.push({
-        id: slug,
-        title: a.textContent.trim(),
-        cover_url: img ? (img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src')) : null,
-        provider: 'mangathemesia',
-        url: href,
-        status: null,
-      });
-    });
-    return results;
+    return _browseByPage('update', page);
   },
 };

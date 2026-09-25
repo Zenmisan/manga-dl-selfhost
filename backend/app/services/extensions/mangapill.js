@@ -75,7 +75,9 @@ var extension = {
 
   async getPopular(page) {
     var p = page || 1;
-    var doc = await _fetchDoc(_MP + '/search?status=&type=&page=' + p);
+    // /search with no query is JS-rendered and returns nothing; homepage is SSR
+    var url = p === 1 ? _MP + '/' : _MP + '/search?status=&type=&page=' + p;
+    var doc = await _fetchDoc(url);
     return _parseCards(doc);
   },
 

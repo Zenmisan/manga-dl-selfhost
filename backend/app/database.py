@@ -35,6 +35,16 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
+    # Import all models to ensure Base.metadata is fully populated
+    import app.models.manga
+    import app.models.download
+    import app.models.reading_progress
+    import app.models.profiles
+    import app.models.comment
+    import app.models.manga_override
+    import app.models.support
+    import app.models.device
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_add_columns()
@@ -44,16 +54,39 @@ async def _migrate_add_columns():
     """Non-destructive column additions for existing databases."""
     is_sqlite = "sqlite" in settings.DATABASE_URL
 
-    async def _safe_add(conn, table: str, col: str, typedef: str):
-        try:
-            if is_sqlite:
-                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}"))
-            else:
-                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}"))
-        except Exception:
-            pass  # column already exists
+    columns = [
+        ("manga", "user_id", "VARCHAR"),
+        ("manga", "chapters_json", "JSON DEFAULT '{}'"),
+        ("manga", "last_synced", "TIMESTAMP"),
+        ("manga", "subscribed", "BOOLEAN DEFAULT FALSE"),
+        ("reading_progress", "manga_title", "VARCHAR"),
+        ("reading_progress", "chapter_title", "VARCHAR"),
+        ("reading_progress", "last_page", "INTEGER DEFAULT 1"),
+        ("reading_progress", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("downloads", "user_id", "VARCHAR"),
+        ("downloads", "file_size_bytes", "INTEGER DEFAULT 0"),
+        ("downloads", "pinned", "BOOLEAN DEFAULT FALSE"),
+        ("downloads", "last_page_read", "INTEGER DEFAULT 0"),
+        ("profiles", "display_name", "VARCHAR"),
+        ("profiles", "bio", "VARCHAR"),
+        ("profiles", "avatar_url", "VARCHAR"),
+        ("profiles", "pinned_badges", "JSON DEFAULT '[]'"),
+        ("profiles", "liked_comments", "JSON DEFAULT '[]'"),
+        ("comments", "display_name", "VARCHAR"),
+        ("comments", "likes", "INTEGER DEFAULT 0"),
+        ("comments", "updated_at", "TIMESTAMP"),
+    ]
 
-    async with engine.begin() as conn:
-        await _safe_add(conn, "manga", "user_id", "VARCHAR")
-        await _safe_add(conn, "downloads", "user_id", "VARCHAR")
+    for table, col, typedef in columns:
+        try:
+            async with engine.begin() as conn:
+                if is_sqlite:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}"))
+                else:
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}"))
+        except Exception as exc:
+            # Column may already exist or table may not yet exist; safe to continue
+            log.debug("Column migration skipped for %s.%s: %s", table, col, exc)
+
     log.info("DB column migration complete")
+

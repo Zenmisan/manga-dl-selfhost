@@ -8,6 +8,25 @@ function _rrSanitize(html) {
     .replace(/\son\w+='[^']*'/gi, '');
 }
 
+// RoyalRoad injects hidden elements via inline CSS classes to foil scrapers.
+// Parse all <style> blocks, find selectors for hidden classes, remove matching elements.
+function _rrRemoveHidden(doc, contentEl) {
+  var styleBlocks = doc.querySelectorAll('style');
+  styleBlocks.forEach(function(style) {
+    var text = style.textContent || '';
+    var lines = text.split('\n');
+    lines.forEach(function(line) {
+      var m = line.match(/^\s*(\.[^\s{,]+)/);
+      if (!m) return;
+      var selector = m[1].trim();
+      if (!selector || selector.length < 2) return;
+      try {
+        contentEl.querySelectorAll(selector).forEach(function(el) { el.remove(); });
+      } catch(e) {}
+    });
+  });
+}
+
 function _rrParseCards(doc, provider) {
   var results = [];
   doc.querySelectorAll('.fiction-list-item, .row.fiction-item').forEach(function(item) {
@@ -40,7 +59,7 @@ var extension = {
     var titleEl = doc.querySelector('h1.font-white');
     var title = titleEl ? titleEl.textContent.trim() : novelId;
 
-    var img = doc.querySelector('.cover-art img, .thumbnail img, img.thumbnail');
+    var img = doc.querySelector('.cover-art-container img, .cover-art img, .fic-header img');
     var cover = img ? (img.getAttribute('src') || img.getAttribute('data-src')) : null;
     if (cover && cover.startsWith('/')) cover = _RR + cover;
 
@@ -48,44 +67,59 @@ var extension = {
     var desc = descEl ? descEl.textContent.trim() : null;
 
     var genres = [];
-    doc.querySelectorAll('.tags .label, .fiction-tag').forEach(function(el) {
+    doc.querySelectorAll('span.tags > a, .fiction-tag').forEach(function(el) {
       var g = el.textContent.trim();
       if (g) genres.push(g);
     });
 
-    var statusEl = doc.querySelector('.label-default, .label-success');
+    var statusEl = doc.querySelector('div.col-md-8 span.label-default, div.col-md-8 span.label-success, div.col-md-8 span.label');
     var status = statusEl ? statusEl.textContent.trim() : null;
 
-    var authorEl = doc.querySelector('.fic-title h4 a, [property="author"] a');
+    var authorEl = doc.querySelector('h4.font-white span a, .fic-title h4 a, [property="author"] a');
     var authors = authorEl ? [authorEl.textContent.trim()] : [];
 
+    // Chapters: use data-url on <tr> rows (QuickNovel approach — more reliable than <a> href)
     var chapters = [];
-    doc.querySelectorAll('#chapters tr.chapter-row, table#chapters tbody tr').forEach(function(row) {
-      var a = row.querySelector('td:first-child a');
-      if (!a) return;
-      var href = a.getAttribute('href') || '';
-      var chIdMatch = href.match(/\/chapter\/(\d+)/);
+    doc.querySelectorAll('div.portlet-body table tbody tr, #chapters tr.chapter-row, table#chapters tbody tr').forEach(function(row, idx) {
+      var url = row.getAttribute('data-url');
+      if (!url) {
+        var a = row.querySelector('td:first-child a');
+        if (!a) return;
+        url = a.getAttribute('href');
+      }
+      if (!url) return;
+      var chIdMatch = url.match(/\/chapter\/(\d+)/);
       if (!chIdMatch) return;
       var chId = novelId + '/chapter/' + chIdMatch[1];
-      var chTitle = a.textContent.trim();
-      var numMatch = chTitle.match(/chapter\s+([\d.]+)/i);
-      var num = numMatch ? parseFloat(numMatch[1]) : chapters.length + 1;
+      var nameEl = row.querySelector('td:first-child a');
+      var chTitle = nameEl ? nameEl.textContent.trim() : ('Chapter ' + chIdMatch[1]);
+      var numMatch = chTitle.match(/chapter\s+([\d.]+)/i) || chTitle.match(/^(\d+(?:\.\d+)?)/) || chTitle.match(/([\d.]+)/);
+      var num = numMatch ? parseFloat(numMatch[1]) : (idx + 1);
       var dateEl = row.querySelector('time');
-      chapters.push({ id: chId, title: chTitle, number: num, published_at: dateEl ? dateEl.getAttribute('datetime') : null });
+      chapters.push({ id: chId, title: chTitle, number: num, published_at: dateEl ? (dateEl.getAttribute('datetime') || dateEl.textContent.trim()) : null });
     });
-    chapters.reverse();
 
     return { id: novelId, title: title, cover_url: cover, description: desc, status: status, genres: genres, authors: authors, provider: 'royalroad', url: _RR + '/fiction/' + novelId, chapters: chapters };
   },
 
   async getChapterText(chapterId) {
-    var parts = chapterId.split('/chapter/');
-    var novelId = parts[0];
-    var chId = parts[1];
-    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_RR + '/fiction/' + novelId + '/chapter/' + chId));
+    var url;
+    if (chapterId.startsWith('/fiction/')) {
+      url = _RR + chapterId;
+    } else {
+      var parts = chapterId.split('/chapter/');
+      var novelId = parts[0];
+      var chId = parts[1];
+      url = _RR + '/fiction/' + novelId + '/chapter/' + chId;
+    }
+    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(url));
     var doc = new DOMParser().parseFromString(data.html, 'text/html');
-    var contentEl = doc.querySelector('.chapter-content, .chapter-inner, .prose');
-    var content = contentEl ? contentEl.innerHTML : '<p>Chapter content not found.</p>';
+    var contentEl = doc.querySelector('.chapter-content');
+    if (!contentEl) contentEl = doc.querySelector('.chapter-inner, .prose');
+    if (!contentEl) return { content: '<p>Chapter content not found.</p>', format: 'html' };
+    // Remove hidden anti-scraper elements before extracting HTML
+    _rrRemoveHidden(doc, contentEl);
+    var content = contentEl.innerHTML;
     return { content: _rrSanitize(content), format: 'html' };
   },
 

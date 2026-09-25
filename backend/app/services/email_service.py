@@ -1,4 +1,8 @@
 import logging
+import smtplib
+import asyncio
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import httpx
 from app.config import get_settings
 
@@ -138,9 +142,42 @@ def _esc(text: str) -> str:
 
 async def send_email(to: str, subject: str, html: str) -> bool:
     settings = get_settings()
-    if not settings.RESEND_API_KEY:
-        log.debug("Resend not configured — skipping email to %s", to)
+
+    # Try Gmail SMTP first (no domain required)
+    if settings.SMTP_USER and settings.SMTP_PASS:
+        return await _send_via_smtp(to, subject, html, settings)
+
+    # Fall back to Resend (requires verified domain for non-owner recipients)
+    if settings.RESEND_API_KEY:
+        return await _send_via_resend(to, subject, html, settings)
+
+    log.debug("No email provider configured — skipping email to %s", to)
+    return False
+
+
+async def _send_via_smtp(to: str, subject: str, html: str, settings) -> bool:
+    def _smtp_send():
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"manga-dl <{settings.SMTP_USER}>"
+        msg["To"] = to
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASS)
+            server.sendmail(settings.SMTP_USER, [to], msg.as_string())
+
+    try:
+        await asyncio.get_event_loop().run_in_executor(None, _smtp_send)
+        log.info("SMTP email sent to %s", to)
+        return True
+    except Exception as e:
+        log.warning("SMTP send failed: %s", e)
         return False
+
+
+async def _send_via_resend(to: str, subject: str, html: str, settings) -> bool:
     try:
         async with httpx.AsyncClient() as client:
             r = await client.post(

@@ -12,16 +12,19 @@ function _asParseCards(doc) {
     var href = a.getAttribute('href') || '';
     if (href.includes('/chapter/')) return;
     var slug = href.split('/comics/').pop().replace(/\/$/, '');
-    if (!slug || seen[slug]) return;
+    if (!slug || seen[slug] || /^\d+$/.test(slug)) return;
     seen[slug] = true;
 
     var card = a.closest('.series-card, .grid > div, div[class*="grid"] > div, .card, div') || a;
-    // Look inside <a> first — tightly scoped to this card, avoids grabbing a sibling's image
     var img = a.querySelector('img') || card.querySelector('img[src*="asura"], img[data-src*="asura"]');
-    // Title order: img.alt → sibling title anchor in parent → inner text elements → slug fallback
     var altTitle = img && img.getAttribute('alt') && !img.getAttribute('alt').match(/^[\d.]+$/) ? img.getAttribute('alt').trim() : '';
-    var titleEl = !altTitle && (a.querySelector('h3, .title, span.font-bold') || card.querySelector('h3, .title, a[class*="line-clamp"], a[class*="font-bold"], span[class*="font-semibold"]') || a);
+    // Never use `|| a` — anchor text contains rank numbers on series-ranking page
+    var titleEl = !altTitle ? (
+      a.querySelector('h3, [class*="title"], span[class*="font-semibold"]') ||
+      card.querySelector('h3, [class*="title"], a[class*="line-clamp"], span[class*="font-semibold"]')
+    ) : null;
     var rawTitle = altTitle || (titleEl ? titleEl.textContent.trim() : '');
+    // If rawTitle is a bare number or empty, derive from slug
     var title = (rawTitle && !rawTitle.match(/^[\d.]+$/)) ? rawTitle : slug.replace(/-[a-f0-9]{8}$/, '').replace(/-/g, ' ');
     if (title) {
       title = title.split(' ').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
@@ -198,7 +201,7 @@ var extension = {
   },
 
   async getPopular(page) {
-    var doc = await _fetchDoc(_AS + '/series-ranking');
+    var doc = await _fetchDoc(_AS + '/comics?page=' + (page || 1) + '&order=popular');
     return _asParseCards(doc);
   },
 

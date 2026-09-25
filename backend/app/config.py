@@ -26,8 +26,13 @@ class Settings(BaseSettings):
     ]
     API_KEY: str | None = None
     RESEND_API_KEY: str | None = None
-    RESEND_FROM_EMAIL: str = "manga-dl <onboarding@resend.dev>"  # swap for verified domain email in prod
+    RESEND_FROM_EMAIL: str = "manga-dl <onboarding@resend.dev>"
     SUPPORT_EMAIL: str = "zenmisan@gmail.com"  # where support ticket notifications go
+    # Gmail SMTP (alternative to Resend — no custom domain needed)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None   # your Gmail address
+    SMTP_PASS: str | None = None   # Google App Password (16 chars)
     
     # AniList OAuth (Authorization Code flow — backend exchanges code for token)
     ANILIST_CLIENT_ID: str | None = None
@@ -35,6 +40,10 @@ class Settings(BaseSettings):
     # MAL OAuth — client secret required even for PKCE flows
     MAL_CLIENT_ID: str | None = None
     MAL_CLIENT_SECRET: str | None = None
+
+    # Per-source auth cookies (injected by proxy when URL matches)
+    COMIXTO_COOKIE: str | None = None
+    COMIXTO_API_TOKEN: str | None = None  # _= query param required for chapter API endpoints
 
     # Supabase Storage Configuration
     SUPABASE_URL: str | None = None
@@ -61,17 +70,33 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Any) -> list[str]:
+        mandatory = [
+            "https://localhost",
+            "capacitor://localhost",
+            "http://localhost",
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "tauri://localhost",
+            "http://tauri.localhost",
+        ]
+        origins: list[str] = []
         if isinstance(v, str):
             v = v.strip()
-            if not v:
-                return []
-            if v.startswith("[") and v.endswith("]"):
-                try:
-                    return json.loads(v)
-                except json.JSONDecodeError:
-                    pass
-            return [i.strip() for i in v.split(",") if i.strip()]
-        return v
+            if v:
+                if v.startswith("[") and v.endswith("]"):
+                    try:
+                        origins = json.loads(v)
+                    except json.JSONDecodeError:
+                        origins = [i.strip() for i in v.split(",") if i.strip()]
+                else:
+                    origins = [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, (list, tuple, set)):
+            origins = list(v)
+
+        for m in mandatory:
+            if m not in origins:
+                origins.append(m)
+        return origins
 
     class Config:
         env_file = ".env"

@@ -182,12 +182,17 @@ function _extractInitialData(doc) {
 
 function _parseBrowseManga(items) {
   return (items || []).map(function(m) {
+    var hid = m.hid || m.slug || '';
+    var titleUrl = m.url ? (_CX + m.url) : (_CX + '/title/' + hid);
+    var poster = m.poster;
+    var cover = typeof poster === 'string' ? poster :
+      (poster?.large || poster?.medium || poster?.small || null);
     return {
-      id: String(m.id || m.slug || ''),
-      title: m.name || m.title || '',
-      cover_url: m.poster?.large || m.poster?.medium || m.poster?.small || null,
+      id: hid,
+      title: m.title || m.name || '',
+      cover_url: cover,
       provider: 'comixto',
-      url: _CX + '/title/' + (m.id || m.slug),
+      url: titleUrl,
       status: m.status || null,
     };
   }).filter(function(m) { return m.id; });
@@ -221,44 +226,64 @@ var extension = {
   },
 
   async getMangaDetail(mangaId) {
+    var hid = mangaId.split('-')[0];
     var doc = await _fetchDoc(_CX + '/title/' + mangaId);
     var init = _extractInitialData(doc);
     var manga = null;
     if (init) {
-      var queries = init.queries || {};
-      for (var key in queries) {
-        var q = queries[key];
-        if (q && q.result && q.result.manga) { manga = q.result.manga; break; }
+      for (var key in (init.queries || {})) {
+        if (key.includes('"manga","detail"')) { manga = init.queries[key]; break; }
       }
     }
-    var title = manga?.name || (doc.querySelector('h1') || {}).textContent || mangaId;
-    var cover = manga?.poster?.large || doc.querySelector('img[class*="cover"]')?.getAttribute('src');
-    var desc = manga?.description || (doc.querySelector('[class*="synopsis"], [class*="description"]') || {}).textContent;
+    var title = (manga && manga.title) || (doc.querySelector('h1') || {}).textContent || mangaId;
+    var poster = manga && manga.poster;
+    var cover = poster ? (poster.large || poster.medium || poster.small || null) : null;
+    var desc = (manga && manga.synopsis) || '';
+    var genres = [];
+    ((manga && manga.genres) || []).forEach(function(g) { genres.push(g.title || g.name || g); });
+    ((manga && manga.tags) || []).forEach(function(t) { genres.push(t.title || t.name || t); });
+    var authors = [];
+    ((manga && manga.authors) || []).forEach(function(a) { authors.push(a.title || a.name || a); });
+
+    // Fetch full chapter list via authed API
     var chapters = [];
-    (manga?.chapters || []).forEach(function(ch) {
-      chapters.push({
-        id: String(ch.id || ch.slug),
-        title: ch.name || ('Chapter ' + ch.number),
-        number: parseFloat(ch.number || ch.chapterNumber || 0),
-        published_at: ch.publishedAt || ch.createdAt || null,
-      });
-    });
-    if (!chapters.length) {
-      doc.querySelectorAll('a[href*="/chapter/"]').forEach(function(a) {
-        var href = a.getAttribute('href') || '';
-        var chId = href.split('/chapter/')[1]?.replace(/\/$/, '') || '';
-        if (!chId) return;
-        var text = a.textContent.trim();
-        var numM = text.match(/([\d.]+)/);
-        chapters.push({ id: chId, title: text, number: numM ? parseFloat(numM[1]) : 0, published_at: null });
-      });
+    try {
+      var numericId = (manga && manga.id) || null;
+      var apiHid = (manga && manga.hid) || hid;
+      var page = 1;
+      while (true) {
+        var chData = await apiFetch('/manga/proxy/json?url=' + encodeURIComponent(
+          _CX + '/api/v1/manga/' + apiHid + '/chapters?page=' + page + '&limit=100&order%5Bnumber%5D=desc'
+        ));
+        var items = chData.items || [];
+        items.forEach(function(ch) {
+          var chHid = ch.hid || ch.id || '';
+          var num = parseFloat(ch.chap || ch.number || ch.chapter || 0);
+          chapters.push({
+            id: '/title/' + mangaId + '/' + ch.id + '-chapter-' + (ch.chap || num),
+            title: ch.title || ('Chapter ' + (ch.chap || num)),
+            number: num,
+            published_at: ch.created_at || null,
+          });
+        });
+        if (items.length < 100) break;
+        page++;
+      }
+    } catch(e) {
+      // fallback: use first/latest from SSR
+      if (manga && manga.latestChapterUrl) {
+        chapters.push({ id: manga.latestChapterUrl, title: 'Chapter ' + (manga.latestChapter || '?'), number: parseFloat(manga.latestChapter) || 0, published_at: null });
+      }
+      if (manga && manga.firstChapterUrl && manga.firstChapterUrl !== manga.latestChapterUrl) {
+        chapters.push({ id: manga.firstChapterUrl, title: 'Chapter 1', number: 1, published_at: null });
+      }
     }
+
     return {
-      id: mangaId, title: title.trim(), cover_url: cover || null,
-      description: desc ? desc.trim() : null,
-      status: manga?.status || null,
-      genres: (manga?.tags || []).map(function(t) { return t.name || t; }),
-      authors: manga?.authors ? [manga.authors] : [],
+      id: mangaId, title: String(title).trim(), cover_url: cover,
+      description: desc ? String(desc).trim() : null,
+      status: (manga && manga.status) || null,
+      genres: genres, authors: authors,
       provider: 'comixto',
       url: _CX + '/title/' + mangaId,
       chapters: chapters,
@@ -266,62 +291,85 @@ var extension = {
   },
 
   async getPages(chapterId) {
-    // Comix.to loads pages via JS — fetch the chapter page and extract from SSR data
-    var data = await apiFetch('/manga/proxy/html?url=' + encodeURIComponent(_CX + '/chapter/' + chapterId));
-    var html = data.html;
-    var doc = new DOMParser().parseFromString(html, 'text/html');
-    var init = _extractInitialData(doc);
+    // chapterId is like "/title/e05zm-.../5578639-chapter-1"
+    // Extract the numeric chapter ID from the path
+    var parts = chapterId.replace(/^\/title\/[^/]+\//, '').split('-');
+    var numericId = parts[0];
 
-    // Extract from SSR
-    var pages = [];
-    if (init) {
-      var queries = init.queries || {};
-      for (var key in queries) {
-        var q = queries[key];
-        if (q && q.result && q.result.pages) {
-          var pagesData = q.result.pages;
-          var base = (pagesData.baseUrl || '').replace(/\/$/, '');
-          (pagesData.items || []).forEach(function(img, idx) {
-            // Determine if V3 (grid-scramble) or legacy XOR
-            var isV3 = img.s === 1;
-            var full = base + '/' + img.url;
-            if (isV3) full += (full.includes('?') ? '&' : '?') + 'v3';
-            pages.push(wrapPageUrl(full, null, null, null, null, null));
-          });
-          if (pages.length) return pages;
-        }
+    // Fetch pages via authed API
+    try {
+      var data = await apiFetch('/manga/proxy/json?url=' + encodeURIComponent(
+        _CX + '/api/v1/chapters/' + numericId
+      ));
+      var pagesData = data.pages || data;
+      var base = (pagesData.baseUrl || '').replace(/\/$/, '');
+      var items = pagesData.items || [];
+      if (items.length) {
+        return items.map(function(img) {
+          var full = base + '/' + img.url;
+          if (img.s === 1) full += (full.includes('?') ? '&' : '?') + 'v3';
+          return wrapPageUrl(
+            full,
+            img.scramble_seed || null,
+            img.scramble_algo || null,
+            img.enc_seed || null,
+            img.enc_len || null,
+            img.enc_algo || null
+          );
+        });
       }
-    }
+    } catch(e) {}
 
-    // DOM fallback
-    doc.querySelectorAll('img[class*="page"], .reading-content img, [data-page] img').forEach(function(img) {
-      var src = img.getAttribute('src') || img.getAttribute('data-src');
-      if (src && src.startsWith('http')) pages.push(src);
-    });
-    return pages;
-  },
-
-  async getPopular(page) {
-    var p = page || 1;
-    var doc = await _fetchDoc(_CX + '/browse?order[score]=desc&page=' + p);
+    // Fallback: fetch chapter HTML page and parse SSR
+    var doc = await _fetchDoc(_CX + chapterId);
     var init = _extractInitialData(doc);
     if (init) {
       for (var key in (init.queries || {})) {
         var q = init.queries[key];
-        if (q && q.result && Array.isArray(q.result.items) && q.result.items.length) return _parseBrowseManga(q.result.items);
+        if (q && q.pages) {
+          var pd = q.pages;
+          var b = (pd.baseUrl || '').replace(/\/$/, '');
+          var pageList = (pd.items || []).map(function(img) {
+            var full = b + '/' + img.url;
+            if (img.s === 1) full += (full.includes('?') ? '&' : '?') + 'v3';
+            return wrapPageUrl(full, img.scramble_seed || null, img.scramble_algo || null, img.enc_seed || null, img.enc_len || null, img.enc_algo || null);
+          });
+          if (pageList.length) return pageList;
+        }
+      }
+    }
+    return [];
+  },
+
+  async getPopular(page) {
+    // Browse page items are client-side only (API needs auth).
+    // Homepage SSR has 50 trending + 31 hot — only reliable for page 1.
+    if ((page || 1) > 1) return [];
+    var doc = await _fetchDoc(_CX + '/');
+    var init = _extractInitialData(doc);
+    if (!init) return [];
+    var queries = init.queries || {};
+    // trending array (direct array, not {result:{items:[]}})
+    for (var key in queries) {
+      var val = queries[key];
+      if (Array.isArray(val) && val.length && val[0] && val[0].hid) {
+        return _parseBrowseManga(val);
       }
     }
     return [];
   },
 
   async getLatest(page) {
-    var p = page || 1;
-    var doc = await _fetchDoc(_CX + '/browse?order[chapter_updated_at]=desc&page=' + p);
+    if ((page || 1) > 1) return [];
+    var doc = await _fetchDoc(_CX + '/');
     var init = _extractInitialData(doc);
-    if (init) {
-      for (var key in (init.queries || {})) {
-        var q = init.queries[key];
-        if (q && q.result && Array.isArray(q.result.items) && q.result.items.length) return _parseBrowseManga(q.result.items);
+    if (!init) return [];
+    var queries = init.queries || {};
+    // hot list with latest chapter updates — stored as {items:[...], meta:{}}
+    for (var key in queries) {
+      var val = queries[key];
+      if (val && Array.isArray(val.items) && val.items.length && val.items[0] && val.items[0].hid) {
+        return _parseBrowseManga(val.items);
       }
     }
     return [];

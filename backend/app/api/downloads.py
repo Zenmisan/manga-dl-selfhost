@@ -33,41 +33,11 @@ async def queue_download(
     req: DownloadRequest,
     user_id: str = Depends(get_current_user),
 ):
-    """Queue a chapter for download, tagged to the authenticated user."""
-    pages: list[str] = req.pages or []
-    manga_title: str = req.manga_title or req.manga_id
-    chapter_title: str = req.chapter_title or f"Chapter {req.chapter_number or 1}"
-    chapter_number: float = req.chapter_number if req.chapter_number is not None else 1.0
-
-    provider = get_provider(req.provider_id)
-    if provider:
-        try:
-            manga = await provider.get_manga(req.manga_id)
-            chapter = next((c for c in manga.chapters if c.id == req.chapter_id), None)
-            if chapter:
-                manga_title = manga.title
-                chapter_title = chapter.title
-                chapter_number = chapter.number
-                pages = await provider.get_pages(req.chapter_id)
-        except Exception as exc:
-            log.warning("Failed to fetch Python provider info for %s: %s", req.provider_id, exc)
-
-    if not pages:
-        raise HTTPException(status_code=422, detail="No pages found — chapter may be paywalled or unavailable")
-
-    download_id = await download_queue.enqueue(
-        db_session_factory=AsyncSessionLocal,
-        provider_id=req.provider_id,
-        manga_id=req.manga_id,
-        manga_title=manga_title,
-        chapter_id=req.chapter_id,
-        chapter_title=chapter_title,
-        chapter_number=chapter_number,
-        page_urls=pages,
-        user_id=user_id,
-    )
-
-    return {"download_id": download_id, "total_pages": len(pages)}
+    """Backend download queue is temporarily disabled in favor of client-side downloads."""
+    return {
+        "status": "disabled",
+        "message": "Backend download queue is temporarily disabled to conserve server memory. Downloads are processed directly in the client browser.",
+    }
 
 
 @router.post("/pause")

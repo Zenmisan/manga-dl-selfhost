@@ -67,7 +67,16 @@ async def list_library_items(db: AsyncSession, user_id: str) -> list[dict]:
     for r in records:
         title = r.manga_title
         if title not in grouped:
-            grouped[title] = {"files": set(), "downloading": 0, "failed": 0, "cover_url": None, "subscribed": False}
+            prov_manga_id = r.manga_id.split(":", 1)[1] if ":" in r.manga_id else r.manga_id
+            grouped[title] = {
+                "files": set(),
+                "downloading": 0,
+                "failed": 0,
+                "cover_url": None,
+                "subscribed": False,
+                "provider": r.provider,
+                "provider_manga_id": prov_manga_id,
+            }
 
         if r.status == "done" and r.output_path:
             grouped[title]["files"].add(Path(r.output_path).name)
@@ -115,6 +124,7 @@ async def list_library_items(db: AsyncSession, user_id: str) -> list[dict]:
             "type": "novel" if data.get("provider") in _novel_providers else "manga",
         }
         for title, data in grouped.items()
+        if data.get("subscribed") or len(data["files"]) > 0
     ]
     return sorted(items, key=lambda x: x["title"])
 

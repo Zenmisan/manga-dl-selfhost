@@ -91,38 +91,45 @@ var extension = {
   },
 
   async getPopular(page) {
-    var doc = await _fetchDoc(_WT + '/en/top?period=WEEK');
-    var results = [];
-    var seen = {};
-    doc.querySelectorAll('.card_item, li[class*="card"]').forEach(function(el) {
-      var a = el.querySelector('a[href*="title_no="]');
-      if (!a) return;
-      var href = a.getAttribute('href') || '';
-      var m = href.match(/title_no=(\d+)/);
-      if (!m) return;
-      var id = m[1];
-      if (seen[id]) return;
-      seen[id] = true;
-      var img = el.querySelector('img');
-      var titleEl = el.querySelector('.subj, .title');
-      results.push({ id: id, title: titleEl ? titleEl.textContent.trim() : id, cover_url: img ? img.getAttribute('src') : null, provider: 'webtoons', url: href, status: null });
-    });
-    return results;
+    var p = page || 1;
+    var data = await _fetchJson(_WTA + '/titlelist/popular?webtoonLanguage=en&pageSize=20&pageNo=' + p);
+    var list = data?.result?.titleList || data?.titleList || data?.result?.titles || [];
+    if (!list.length) {
+      // Fallback: category API
+      var data2 = await _fetchJson(_WT + '/api/category?webtoonType=WEBTOON&languageCode=en&sortOrder=READ_COUNT&pageSize=20&pageNo=' + p);
+      list = data2?.result?.titleList || data2?.titleList || [];
+    }
+    return list.map(function(t) {
+      var id = String(t.titleId || t.title_no || t.id || '');
+      return {
+        id: id,
+        title: t.title || t.name || id,
+        cover_url: t.thumbnail || t.thumbnailUrl || t.squareThumbnail || null,
+        provider: 'webtoons',
+        url: _WT + '/en/drama/' + (t.titleNameUrlEncoding || id) + '/list?title_no=' + id,
+        status: t.publishStatus || null,
+      };
+    }).filter(function(t) { return t.id; });
   },
 
   async getLatest(page) {
-    var doc = await _fetchDoc(_WT + '/en/new');
-    var results = [];
-    var seen = {};
-    doc.querySelectorAll('a[href*="title_no="]').forEach(function(a) {
-      var href = a.getAttribute('href') || '';
-      var m = href.match(/title_no=(\d+)/);
-      if (!m) return;
-      var id = m[1];
-      if (seen[id]) return;
-      seen[id] = true;
-      results.push({ id: id, title: a.textContent.trim() || id, cover_url: null, provider: 'webtoons', url: href, status: null });
-    });
-    return results;
+    var p = page || 1;
+    var data = await _fetchJson(_WTA + '/titlelist/new?webtoonLanguage=en&pageSize=20&pageNo=' + p);
+    var list = data?.result?.titleList || data?.titleList || data?.result?.titles || [];
+    if (!list.length) {
+      var data2 = await _fetchJson(_WT + '/api/category?webtoonType=WEBTOON&languageCode=en&sortOrder=NEW_ARRIVAL&pageSize=20&pageNo=' + p);
+      list = data2?.result?.titleList || data2?.titleList || [];
+    }
+    return list.map(function(t) {
+      var id = String(t.titleId || t.title_no || t.id || '');
+      return {
+        id: id,
+        title: t.title || t.name || id,
+        cover_url: t.thumbnail || t.thumbnailUrl || t.squareThumbnail || null,
+        provider: 'webtoons',
+        url: _WT + '/en/drama/' + (t.titleNameUrlEncoding || id) + '/list?title_no=' + id,
+        status: t.publishStatus || null,
+      };
+    }).filter(function(t) { return t.id; });
   },
 };

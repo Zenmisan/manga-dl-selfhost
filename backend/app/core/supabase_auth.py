@@ -155,3 +155,14 @@ async def get_current_user_email(request: Request) -> str | None:
         return payload.get("email")
     except Exception:
         return None
+
+
+async def get_optional_user(request: Request) -> str | None:
+    """Extract authenticated user_id if valid token present, otherwise None."""
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    try:
+        return await get_current_user(request)
+    except Exception:
+        return None
